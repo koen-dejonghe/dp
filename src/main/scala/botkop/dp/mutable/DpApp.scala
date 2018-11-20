@@ -14,8 +14,9 @@ case class Variable(var data: Double, f: Option[Function] = None) {
 
   def backward(): Unit = backward(1)
 
-  def +(v: Variable): Variable = Add(this, v).forward()
-  def *(v: Variable): Variable = Mul(this, v).forward()
+  import Function._
+  def +(v: Variable): Variable = add(this, v)
+  def *(v: Variable): Variable = mul(this, v)
 }
 
 trait Function {
@@ -23,20 +24,34 @@ trait Function {
   def backward(g: Double): Unit
 }
 
-case class Add(a: Variable, b: Variable) extends Function {
-  override def forward(): Variable = Variable(a.data + b.data, Some(this))
-  override def backward(g: Double): Unit = {
-    a.backward(g)
-    b.backward(g)
-  }
-}
+object Function {
 
-case class Mul(a: Variable, b: Variable) extends Function {
-  override def forward(): Variable = Variable(a.data * b.data, Some(this))
-  override def backward(g: Double): Unit = {
-    a.backward(b.data * g)
-    b.backward(a.data * g)
+  case class SimpleLoss(x: Variable, y: Variable) extends Function {
+    val diff: Double = x.data - y.data
+    override def forward(): Variable = Variable(diff, Some(this))
+    override def backward(g: Double): Unit = x.backward(diff)
   }
+  def simpleLoss(x: Variable, y: Variable): Variable =
+    SimpleLoss(x, y).forward()
+
+  case class Add(a: Variable, b: Variable) extends Function {
+    override def forward(): Variable = Variable(a.data + b.data, Some(this))
+    override def backward(g: Double): Unit = {
+      a.backward(g)
+      b.backward(g)
+    }
+  }
+  def add(a: Variable, b: Variable): Variable = Add(a, b).forward()
+
+  case class Mul(a: Variable, b: Variable) extends Function {
+    override def forward(): Variable = Variable(a.data * b.data, Some(this))
+    override def backward(g: Double): Unit = {
+      a.backward(b.data * g)
+      b.backward(a.data * g)
+    }
+  }
+  def mul(a: Variable, b: Variable): Variable = Mul(a, b).forward()
+
 }
 
 abstract class Optimizer(parameters: Seq[Variable]) {
@@ -44,11 +59,16 @@ abstract class Optimizer(parameters: Seq[Variable]) {
   def zeroGrad(): Unit = parameters.foreach(p => p.g = 0)
 }
 
-case class SGD(parameters: Seq[Variable], lr: Double)
-    extends Optimizer(parameters) {
-  override def step(): Unit = parameters.foreach { p =>
-    p.data -= p.g * lr
+object Optimizer {
+
+  case class SGD(parameters: Seq[Variable], lr: Double)
+      extends Optimizer(parameters) {
+    override def step(): Unit = parameters.foreach { p =>
+      p.data -= p.g * lr
+    }
   }
+
+  def sgd(m: Module, lr: Double): SGD = SGD(m.parameters, lr)
 }
 
 abstract class Module {
@@ -59,15 +79,20 @@ abstract class Module {
   def apply(x: Variable): Variable = forward(x)
 }
 
-case class Net(m: Module, mlf: (Variable, Variable) => Function, o: Optimizer) {
+case class Net(m: Module, o: Optimizer, mlf: (Variable, Variable) => Variable) {
 
-  def learnUntil(xys: Iterator[(Variable, Variable)],
-                 condition: (Int, Double) => Boolean): (Int, Double) = {
+  def learn(xys: Iterable[(Variable, Variable)],
+            learnUntil: (Int, Double) => Boolean,
+            logEvery: Int = 100): (Int, Double) = {
     @tailrec
     def lu(i: Int = 1): (Int, Double) = {
-      val l = learn(xys)
-      println(l)
-      if (!condition(i, l))
+
+      val l = learn(xys.iterator)
+      if (i % logEvery == 0) {
+        println(s"$i $l")
+      }
+
+      if (!learnUntil(i, l))
         lu(i + 1)
       else
         (i, l)
@@ -86,7 +111,7 @@ case class Net(m: Module, mlf: (Variable, Variable) => Function, o: Optimizer) {
   def learn(x: Variable, y: Variable): Double = {
     o.zeroGrad()
     val yHat = m(x)
-    val l = mlf(yHat, y).forward()
+    val l = mlf(yHat, y)
     l.backward()
     o.step()
     l.data
@@ -99,22 +124,13 @@ object DpApp extends App {
 
   def function(x: Double): Double = x / 2 + 3
   val numSamples = 10
+  val lr = 0.1
 
   val xys = (1 to numSamples) map { _ =>
     val x = Random.nextDouble()
     val y = function(x)
     (Variable(x), Variable(y))
   }
-
-  case class SimpleLoss(actual: Variable, target: Variable) extends Function {
-    val diff: Double = actual.data - target.data
-    override def forward(): Variable =
-      Variable(diff, Some(this))
-    override def backward(g: Double): Unit =
-      actual.backward(diff)
-  }
-
-  def makeLossFunction(x: Variable, y: Variable): Function = SimpleLoss(x, y)
 
   val m: Module = new Module() {
     val w: Variable = Variable(Random.nextDouble())
@@ -124,38 +140,18 @@ object DpApp extends App {
       x * w + b
   }
 
-  val o = SGD(m.parameters, 1e-4)
+  val o = Optimizer.sgd(m, lr)
 
-  val n = Net(m, makeLossFunction, o)
+  val n = Net(m, o, Function.simpleLoss)
 
-  n.learnUntil(xys.iterator, (i, _) => i > 1000)
+  def learnUntil(epoch: Int, loss: Double): Boolean =
+    epoch > 10000
+
+  n.learn(xys, learnUntil _)
 
   val x = 11
   val yh = n(Variable(x)).data
   val y = function(x)
   println(s"x=$x f(x)=$y y^=$yh")
-
-  /*
-  val printEvery = 100
-  for (it <- 1 to 10000) {
-    val loss = xs.zip(ys).foldLeft(0.0) {
-      case (z, (x, y)) =>
-        m.zeroGrad()
-        val yHat = m(x)
-        val l = Loss(yHat, y).forward()
-        l.backward()
-        o.step()
-        z + l.data
-    }
-
-    if (it % printEvery == 0) {
-      val x = 11
-      val yh = m(Variable(x)).data
-      val y = function(x)
-      val l = loss / (numSamples * printEvery)
-      println(s"$it x=$x f(x)=$y y^=$yh ($l)")
-    }
-  }
- */
 
 }
