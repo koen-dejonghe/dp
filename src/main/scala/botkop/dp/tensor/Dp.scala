@@ -1,85 +1,30 @@
 package botkop.dp.tensor
 
 import botkop.{numsca => ns}
-import botkop.numsca.Tensor
 
-case class Variable(var data: Tensor, f: Option[Function] = None) {
-  lazy val g: Tensor = ns.zerosLike(data)
+object Dp extends App {
 
-  def backward(gradOutput: Tensor): Unit = {
-    g += gradOutput
-    for (gf <- f) gf.backward(gradOutput)
-  }
-
-  def backward(): Unit = backward(ns.ones(data.shape))
-
+  import Module._
   import Function._
-  def +(v: Variable): Variable = add(this, v)
-  def *(v: Variable): Variable = mul(this, v)
-}
+  import Optimizer._
 
-trait Function {
-  def forward(): Variable
-  def backward(g: Tensor): Unit
-}
+  val numSamples = 16
+  val numClasses = 5
+  val nf1 = 40
+  val nf2 = 20
 
-object Function {
-  case class Add(a: Variable, b: Variable) extends Function {
-    override def forward(): Variable = Variable(a.data + b.data, Some(this))
-    override def backward(g: Tensor): Unit = {
-      a.backward(g)
-      b.backward(g)
-    }
+  val target = Variable(ns.randint(numClasses, Array(numSamples, 1)))
+  val input = Variable(ns.randn(numSamples, nf1))
+  val xys = Seq((input, target))
+
+  val m: Module = new Module {
+    val fc1: Linear = linear(nf1, nf2)
+    val fc2: Linear = linear(nf2, numClasses)
+    override def forward(x: Variable): Variable = x ~> fc1 ~> relu ~> fc2
   }
-  def add(a: Variable, b: Variable): Variable = Add(a, b).forward()
 
-  case class Mul(a: Variable, b: Variable) extends Function {
-    override def forward(): Variable = Variable(a.data * b.data, Some(this))
-    override def backward(g: Tensor): Unit = {
-      a.backward(b.data * g)
-      b.backward(a.data * g)
-    }
-  }
-  def mul(a: Variable, b: Variable): Variable = Mul(a, b).forward()
+  val o = sgd(m, 1e-1)
+  val g = Gate(m, o, softmaxLoss)
+  g.learn(xys, 100, 10)
+
 }
-
-abstract class Optimizer(parameters: Seq[Variable]) {
-  def step(): Unit
-  def zeroGrad(): Unit = parameters.foreach(p => p.g := 0)
-}
-
-object Optimizer {
-  case class SGD(parameters: Seq[Variable], lr: Double)
-      extends Optimizer(parameters) {
-    override def step(): Unit = parameters.foreach { p =>
-      p.data -= p.g * lr
-    }
-  }
-  def sgd(m: Module, lr: Double): SGD = SGD(m.parameters, lr)
-}
-
-abstract class Module(localParameters: Seq[Variable]) {
-
-  // todo also obtain local parameters through introspection
-  // and test this
-
-  // by default, obtain submodules through introspection
-  lazy val subModules: Seq[Module] =
-    this.getClass.getDeclaredFields.flatMap { f =>
-      f setAccessible true
-      f.get(this) match {
-        case module: Module => Some(module)
-        case _              => None
-      }
-    }
-
-  def parameters: Seq[Variable] =
-    localParameters ++ subModules.flatMap(_.parameters)
-
-  def gradients: Seq[Tensor] = parameters.map(_.g)
-  def zeroGrad(): Unit = parameters.foreach(p => p.g := 0)
-  def forward(x: Variable): Variable
-  def apply(x: Variable): Variable = forward(x)
-}
-
-class Dp {}

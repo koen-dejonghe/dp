@@ -79,8 +79,7 @@ abstract class Module {
   def apply(x: Variable): Variable = forward(x)
 }
 
-case class Net(m: Module, o: Optimizer, mlf: (Variable, Variable) => Variable) {
-
+case class Net(m: Module, o: Optimizer, lf: (Variable, Variable) => Variable) {
   def learn(xys: Iterable[(Variable, Variable)],
             learnUntil: (Int, Double) => Boolean,
             logEvery: Int = 100): (Int, Double) = {
@@ -111,7 +110,7 @@ case class Net(m: Module, o: Optimizer, mlf: (Variable, Variable) => Variable) {
   def learn(x: Variable, y: Variable): Double = {
     o.zeroGrad()
     val yHat = m(x)
-    val l = mlf(yHat, y)
+    val l = lf(yHat, y)
     l.backward()
     o.step()
     l.data
