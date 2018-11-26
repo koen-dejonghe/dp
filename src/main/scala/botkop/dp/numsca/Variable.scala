@@ -1,4 +1,4 @@
-package botkop.dp.tensor
+package botkop.dp.numsca
 
 import botkop.numsca.Tensor
 import botkop.{numsca => ns}

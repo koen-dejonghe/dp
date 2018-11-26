@@ -1,4 +1,4 @@
-package botkop.dp.tensor
+package botkop.dp.numsca
 
 import scala.annotation.tailrec
 

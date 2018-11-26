@@ -1,4 +1,4 @@
-package botkop.dp.tensor
+package botkop.dp.numsca
 
 object Optimizer {
   def sgd(m: Module, lr: Double): SGD = SGD(m.parameters, lr)
