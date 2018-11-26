@@ -12,22 +12,22 @@ case class Variable(data: Tensor,
 
   def shape: List[Int] = data.shape.toList
 
+  def backward(): Unit = backward(ns.ones(data.shape))
+
   def backward(gradOutput: Tensor): Unit = {
     val ubg = unbroadcast(gradOutput)
     g += ubg
     for (gf <- f) gf.backward(ubg)
   }
 
-  def backward(): Unit = backward(ns.ones(data.shape))
-
   // todo maybe implement this only for functions that can cause broadcasting
   def unbroadcast(gradOutput: Tensor): Tensor = {
     val gs = gradOutput.shape
-    val ls = data.shape
-    if (gs.sameElements(ls))
+    val ds = data.shape
+    if (gs.sameElements(ds))
       gradOutput
     else
-      ls.zip(gs).zipWithIndex.foldLeft(gradOutput) {
+      ds.zip(gs).zipWithIndex.foldLeft(gradOutput) {
         case (z: Tensor, ((oi, ni), i)) =>
           if (oi == ni)
             z

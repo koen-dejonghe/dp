@@ -13,8 +13,8 @@ object Dp extends App {
   val nf1 = 40
   val nf2 = 20
 
-  val target = Variable(ns.randint(numClasses, Array(numSamples, 1)))
   val input = Variable(ns.randn(numSamples, nf1))
+  val target = Variable(ns.randint(numClasses, Array(numSamples, 1)))
   val xys = Seq((input, target))
 
   val m: Module = new Module {
