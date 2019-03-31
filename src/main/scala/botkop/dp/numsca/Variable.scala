@@ -21,13 +21,13 @@ case class Variable(data: Tensor,
   }
 
   // todo maybe implement this only for functions that can cause broadcasting
-  def unbroadcast(gradOutput: Tensor): Tensor = {
-    val gs = gradOutput.shape
+  def unbroadcast(t: Tensor): Tensor = {
+    val gs = t.shape
     val ds = data.shape
     if (gs.sameElements(ds))
-      gradOutput
+      t
     else
-      ds.zip(gs).zipWithIndex.foldLeft(gradOutput) {
+      ds.zip(gs).zipWithIndex.foldLeft(t) {
         case (z: Tensor, ((oi, ni), i)) =>
           if (oi == ni)
             z
