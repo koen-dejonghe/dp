@@ -28,3 +28,14 @@ object Dp extends App {
   g.learn(xys, 100, 10)
 
 }
+
+object Dp1 extends App {
+
+  def f(v: Variable): Variable = 2 * v + v * v * v
+
+  val t = Variable(ns.randn(2, 3))
+  val r = f(t)
+  r.backward()
+  println(t.g)
+
+}

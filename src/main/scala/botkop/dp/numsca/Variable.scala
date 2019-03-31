@@ -55,4 +55,6 @@ object Variable {
   def apply(d: Double): Variable = Variable(Tensor(d))
   def apply(d: Double, name: Option[String]): Variable =
     Variable(Tensor(d), name = name)
+
+  implicit def double2Var(d: Double): Variable = Variable(d)
 }
