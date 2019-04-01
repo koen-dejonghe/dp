@@ -59,7 +59,7 @@ object NumscaLantern extends App {
     def apply(t: Tensor): Variable = Variable(t, ns.zerosLike(t))
     def apply(d: Double): Variable = Variable(Tensor(d))
     implicit def doubleToVariable(d: Double): Variable = Variable(d)
-
+    implicit def tensorToVariable(t: Tensor): Variable = Variable(t)
   }
 
   def grad(f: Variable => Variable @cps[Unit])(x: Tensor): Tensor = {
@@ -84,10 +84,39 @@ object NumscaLantern extends App {
 
   })
 
-  /*
   val x = Variable(ns.arange(12).reshape(3, 4))
   val y = Variable(ns.arange(8).reshape(4, 2))
-  val z = x.dot(y)
-   */
+  // val z = x.dot(y)
+
+  val g = ns.arange(6).reshape(3, 2)
+
+  def grad2(f: Variable => Variable @cps[Unit])(x: Variable): Variable = {
+    reset { f(x).d := g }
+    x.d
+  }
+  val df2: Variable => Variable = grad2(x => x dot y)
+
+  val dz = df2(x)
+  println("========================")
+  println(dz)
+  println(x.d)
+  println(y.d)
+
+
+  x.d := 0.0
+  y.d := 0.0
+  def g2(f: (Variable, Variable) => Variable @cps[Variable])(x: Variable, y: Variable, g: Tensor): Variable = {
+    reset {
+      val r = f(x, y)
+      r.d := g
+      r
+    }
+  }
+
+  val df3 = g2((x0, y0) => x0 dot y0)
+  df3(x, y, g)
+  println("========================")
+  println(x.d)
+  println(y.d)
 
 }
