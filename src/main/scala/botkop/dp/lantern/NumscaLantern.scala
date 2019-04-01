@@ -11,7 +11,7 @@ object NumscaLantern extends App {
   case class XTensor(t: Tensor) {
 
     def unbroadcast(target: Tensor): Tensor =
-      if (target.shape.sameElements(t.shape))
+      if (target.shape sameElements t.shape)
         target
       else
         t.shape.zip(target.shape).zipWithIndex.foldLeft(target) {
@@ -83,5 +83,11 @@ object NumscaLantern extends App {
   // dx == x2
 
   })
+
+  /*
+  val x = Variable(ns.arange(12).reshape(3, 4))
+  val y = Variable(ns.arange(8).reshape(4, 2))
+  val z = x.dot(y)
+   */
 
 }
