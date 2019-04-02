@@ -5,6 +5,7 @@ import botkop.numsca.Tensor
 import XTensor._
 
 import scala.language.implicitConversions
+import scala.util.Random
 import scala.util.continuations.{cps, reset, shift}
 
 object NumscaLanternGrad extends App {
@@ -55,7 +56,6 @@ object NumscaLanternGrad extends App {
   println(x.d)
   println(y.d)
 
-
   x.d := 0.0
   y.d := 0.0
 
@@ -70,8 +70,6 @@ object NumscaLanternGrad extends App {
   println("========================")
   println(x.d)
   println(y.d)
-
-
   /*
   x.d := 0.0
   y.d := 0.0
@@ -88,10 +86,71 @@ object NumscaLanternGrad extends App {
   println("========================")
   println(x.d)
   println(y.d)
-   */
+ */
 }
 
 object NumscaLantern extends App {
+
+  def function(x: Tensor): Tensor = ns.sum(x * 5, axis = 1)
+
+  val numBatches = 10
+  val numSamples = 3
+  val numFeatures = 4
+  val lr = 1e-2
+
+  val xys = (1 to numBatches) map { _ =>
+    val x = ns.randn(numSamples, numFeatures)
+    val y = function(x)
+    (x, y)
+  }
+
+  val w0: Variable = Variable(ns.randn(10, numFeatures))
+  val b0: Variable = Variable(ns.zeros(1, 10))
+
+  val w1: Variable = Variable(ns.randn(1, 10))
+  val b1: Variable = Variable(ns.zeros(1, 1))
+
+  // def net(x: Tensor) = (Variable(x) dot w0.t + b0) dot w1.t + b1
+  def net(x: Tensor) = {
+    (Variable(x) dot w0.t) + b0
+  }
+
+  for (epoch <- 1 to 100) {
+    xys foreach {
+      case (x0, y0) =>
+        reset {
+//          val r = (Variable(x0).dot(w0.t)) + b0
+//          println(r.shape)
+          val r = net(x0)
+          val g = y0 - r.x
+          r.d -= g
+        }
+
+        w0.x -= w0.d * lr
+        b0.x -= b0.d * lr
+        w0.d := 0
+        b0.d := 0
+//
+//        w1.x -= w1.d * lr
+//        b1.x -= b1.d * lr
+//        w1.d := 0
+//        b1.d := 0
+    }
+
+    reset {
+      val x = ns.randn(numSamples, numFeatures)
+      val y = function(x)
+      val yHat = net(x)
+      println(ns.sum((y - yHat.x) ** 2))
+    }
+  }
+//  val x = ns.randn(numSamples, numFeatures)
+//  val y = function(x)
+//  val yHat = x dot w.x.transpose() + b.x
+//
+//  println(x)
+//  println(y)
+//  println(yHat)
 
 }
 
@@ -117,13 +176,24 @@ object XTensor {
   implicit def t2xt(t: Tensor): XTensor = XTensor(t)
 }
 
-case class Variable(x: Tensor, d: Tensor) {
+case class Variable(x: Tensor) {
+
+  lazy val d: Tensor = ns.zerosLike(x)
+
+  def shape: List[Int] = x.shape.toList
 
   def +(that: Variable) = shift { (k: Variable => Unit) =>
     val y = Variable(x + that.x)
     k(y)
     this.d +:= y.d
     that.d +:= y.d
+  }
+
+  def -(that: Variable) = shift { (k: Variable => Unit) =>
+    val y = Variable(x - that.x)
+    k(y)
+    this.d +:= y.d
+    that.d +:= -y.d
   }
 
   def *(that: Variable) = shift { (k: Variable => Unit) =>
@@ -139,12 +209,17 @@ case class Variable(x: Tensor, d: Tensor) {
     this.d +:= y.d dot that.x.T
     that.d +:= this.x.T dot y.d
   }
+
+  def t = shift { (k: Variable => Unit) =>
+    val r = Variable(x.transpose())
+    k(r)
+    this.d += r.d.transpose()
+  }
 }
 
 object Variable {
-  def apply(t: Tensor): Variable = Variable(t, ns.zerosLike(t))
+//  def apply(t: Tensor): Variable = Variable(t, ns.zerosLike(t))
   def apply(d: Double): Variable = Variable(Tensor(d))
   implicit def doubleToVariable(d: Double): Variable = Variable(d)
-  // implicit def tensorToVariable(t: Tensor): Variable = Variable(t)
+  implicit def tensorToVariable(t: Tensor): Variable = Variable(t)
 }
-
